@@ -20,10 +20,11 @@
 % 12 cost_dwell_vel     velocità nulla durante dwell 2 veh
 % 13 cost_dwell_acc     accelerazione nulla durante dwell
 % 14 cost_dwell_acc     accelerazione nulla durante dwell 2 veh
+% 15 cost_aero          costo per tenere platoon unito
 
-Qx1 = [10, 10, 2, 2, 0.5, 0.5, 50, 50, 200, 200, 500, 500, 100, 100];
+Qx1 = [10, 10, 2, 2, 0.5, 0.5, 50, 50, 200, 200, 500, 500, 100, 100, 0.5];
 W1 = diag(Qx1);
-NMPC_Wmat1 = [W1(1,:) W1(2,:) W1(3,:) W1(4,:) W1(5,:) W1(6,:) W1(7,:) W1(8,:) W1(9,:) W1(10,:) W1(11,:) W1(12,:) W1(13,:) W1(14,:)];
+NMPC_Wmat1 = [W1(1,:) W1(2,:) W1(3,:) W1(4,:) W1(5,:) W1(6,:) W1(7,:) W1(8,:) W1(9,:) W1(10,:) W1(11,:) W1(12,:) W1(13,:) W1(14,:) W1(15,:)];
 
 % Terminal cost
 QN1 = [1 1];
@@ -43,7 +44,7 @@ Ts = 1;
 N = 50;
 Vmax = 50;
 Vmax_2 = 50;
-xInit = [20 2 0 0 1 0];
+xInit = [90 2 0 0 1 0];
 uInit = [0 0];
 
 load('TL_data_piola-tonale_lookupTable_1500s_12TL.mat')

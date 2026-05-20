@@ -76,7 +76,7 @@ extern "C"
 /** Number of differential derivative variables. */
 #define ACADO_NXD 0
 /** Number of references/measurements per node on the first N nodes. */
-#define ACADO_NY 14
+#define ACADO_NY 15
 /** Number of references/measurements on the last (N + 1)st node. */
 #define ACADO_NYN 2
 /** Total number of QP optimization variables. */
@@ -124,11 +124,11 @@ real_t u[ 100 ];
  */
 real_t od[ 3162 ];
 
-/** Column vector of size: 700
+/** Column vector of size: 750
  * 
- *  Matrix containing 50 reference/measurement vectors of size 14 for first 50 nodes.
+ *  Matrix containing 50 reference/measurement vectors of size 15 for first 50 nodes.
  */
-real_t y[ 700 ];
+real_t y[ 750 ];
 
 /** Column vector of size: 2
  * 
@@ -136,8 +136,8 @@ real_t y[ 700 ];
  */
 real_t yN[ 2 ];
 
-/** Matrix of size: 14 x 14 (row major format) */
-real_t W[ 196 ];
+/** Matrix of size: 15 x 15 (row major format) */
+real_t W[ 225 ];
 
 /** Matrix of size: 2 x 2 (row major format) */
 real_t WN[ 4 ];
@@ -173,8 +173,8 @@ real_t state[ 118 ];
 /** Column vector of size: 300 */
 real_t d[ 300 ];
 
-/** Column vector of size: 700 */
-real_t Dy[ 700 ];
+/** Column vector of size: 750 */
+real_t Dy[ 750 ];
 
 /** Column vector of size: 2 */
 real_t DyN[ 2 ];
@@ -185,26 +185,26 @@ real_t evGx[ 1800 ];
 /** Matrix of size: 300 x 2 (row major format) */
 real_t evGu[ 600 ];
 
-/** Column vector of size: 80 */
-real_t objAuxVar[ 80 ];
+/** Column vector of size: 100 */
+real_t objAuxVar[ 100 ];
 
 /** Row vector of size: 70 */
 real_t objValueIn[ 70 ];
 
-/** Row vector of size: 126 */
-real_t objValueOut[ 126 ];
+/** Row vector of size: 135 */
+real_t objValueOut[ 135 ];
 
 /** Matrix of size: 300 x 6 (row major format) */
 real_t Q1[ 1800 ];
 
-/** Matrix of size: 300 x 14 (row major format) */
-real_t Q2[ 4200 ];
+/** Matrix of size: 300 x 15 (row major format) */
+real_t Q2[ 4500 ];
 
 /** Matrix of size: 100 x 2 (row major format) */
 real_t R1[ 200 ];
 
-/** Matrix of size: 100 x 14 (row major format) */
-real_t R2[ 1400 ];
+/** Matrix of size: 100 x 15 (row major format) */
+real_t R2[ 1500 ];
 
 /** Matrix of size: 6 x 6 (row major format) */
 real_t QN1[ 36 ];
@@ -212,8 +212,8 @@ real_t QN1[ 36 ];
 /** Matrix of size: 6 x 2 (row major format) */
 real_t QN2[ 12 ];
 
-/** Column vector of size: 552 */
-real_t conAuxVar[ 552 ];
+/** Column vector of size: 553 */
+real_t conAuxVar[ 553 ];
 
 /** Row vector of size: 70 */
 real_t conValueIn[ 70 ];

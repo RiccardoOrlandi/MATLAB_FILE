@@ -84,10 +84,21 @@ cost_stop_target2 = is(w_stop_active_2 * (pos2 - s_stop_active_2) / s_max);
 cost_dwell_pos2 = is(x_dwell_active_2 * (pos2 - s_stop_active_2) / eps_stop_front);
 cost_dwell_vel2 = is(x_dwell_active_2 * vel2 / eps_stop_v);
 cost_dwell_acc2 = is(x_dwell_active_2 * acc2 / eps_stop_a);
+%======================================
+% AERODYNAMIC / PLATOON GAP COST
+%======================================
+d_gap     = 5;   % distanza desiderata [m]
+gap_on    = 20;   % distanza oltre cui il termine satura [m]
+sigma_gap = 5;    % morbidezza della transizione [m]
+
+% gap bumper-to-bumper
+gap = is((pos - L_platoon) - pos2);
+aero_activation = is(0.5 - atan((gap - gap_on)/sigma_gap)/pi);
+cost_aero = is(aero_activation * (gap - d_gap)/d_gap);
 %==========================================
 % COST FUNCTION
 %==========================================
-h = {cost_dist; cost_dist2; cost_jerk; cost_jerk2; cost_Ax; cost_Ax2; cost_stop_target; cost_stop_target2; cost_dwell_pos; cost_dwell_pos2 ; cost_dwell_vel; cost_dwell_vel2 ;cost_dwell_acc; cost_dwell_acc2};
+h = {cost_dist; cost_dist2; cost_jerk; cost_jerk2; cost_Ax; cost_Ax2; cost_stop_target; cost_stop_target2; cost_dwell_pos; cost_dwell_pos2 ; cost_dwell_vel; cost_dwell_vel2 ;cost_dwell_acc; cost_dwell_acc2;cost_aero};
 hN = {cost_dist;cost_dist2};
 
 % h = [diffStates; controls];
@@ -137,7 +148,7 @@ ocp.subjectTo(vel >= 0);
 ocp.subjectTo(is(vel2 - Vmax_2) <= 0);
 ocp.subjectTo(vel2 >= 0);
 
-ocp.subjectTo((pos-L_platoon)-pos2>=5);
+ocp.subjectTo(gap>=2);
 
 % ============================================================
 % Bus stop constraints
@@ -187,6 +198,7 @@ ocp.subjectTo(is(pos2 - ((s_TL(8)-d_safe_TL)*(1-x_TL8_2)  + s_max*x_TL8_2 )) <= 
 ocp.subjectTo(is(pos2 - ((s_TL(9)-d_safe_TL)*(1-x_TL9_2)  + s_max*x_TL9_2 )) <= 0);
 ocp.subjectTo(is(pos2 - ((s_TL(10)-d_safe_TL)*(1-x_TL10_2) + s_max*x_TL10_2)) <= 0);
 ocp.subjectTo(is(pos2 - ((s_TL(11)-d_safe_TL)*(1-x_TL11_2) + s_max*x_TL11_2)) <= 0);
+
 % Traffic light - tail constraint
 ocp.subjectTo(is((pos-L_platoon) - ((s_TL(1)-d_safe_TL)*(1-x_TL1_tail)  + s_max*x_TL1_tail )) <= 0);
 ocp.subjectTo(is((pos-L_platoon) - ((s_TL(2)-d_safe_TL)*(1-x_TL2_tail)  + s_max*x_TL2_tail )) <= 0);

@@ -25,7 +25,7 @@ ACADO_NDX = 0;
 ACADO_NXA = 0;
 ACADO_NU  = 2;
 ACADO_NOD = 62;
-ACADO_NY  = 14;
+ACADO_NY  = 15;
 ACADO_NYN = 2;
 
 ACADO_QP_SOLVER                   = 'QPOASES3';
