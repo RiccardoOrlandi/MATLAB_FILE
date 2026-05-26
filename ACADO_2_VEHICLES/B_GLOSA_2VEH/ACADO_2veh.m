@@ -114,7 +114,7 @@ cost_jerk2 = is(jerk2)/jerk_max;
 % 5.2 Costo aerodinamico / mantenimento gap del platoon
 %--------------------------------------------------------------------------
 
-d_gap = 3;             % distanza desiderata
+d_gap = 4;             % distanza desiderata
 % lambda_aero = 5;       % lunghezza caratteristica effetto aerodinamico [m]
 % aero_activation = exp(-gap/lambda_aero);
 % cost_aero = is(aero_activation*(gap - d_gap)/d_gap);

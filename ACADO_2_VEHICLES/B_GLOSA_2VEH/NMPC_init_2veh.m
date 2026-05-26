@@ -44,7 +44,7 @@ Ts = 1;
 N = 50;
 Vmax = 50;
 Vmax_2 = 50;
-xInit = [L_platoon+2 2 0 0 2 0];
+xInit = [100 2 0 0 2 0];
 uInit = [0 0];
 
 load('TL_data_piola-tonale_lookupTable_1500s_12TL.mat')
