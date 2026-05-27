@@ -1,0 +1,228 @@
+function h = plot_covDist_2veh_platoon_v2(out,i_fig,s_TL,s_stop,L_platoon)
+% ============================================================
+% PLOT NMPC-BGLOSA 2 VEHICLES WITH FINITE LENGTH L_PLATOON
+% [OPTIMIZED VERSION]
+%
+% State convention:
+%   out.states(:,1) = s1,  (:,2) = v1,  (:,3) = a1
+%   out.states(:,4) = s2,  (:,5) = v2,  (:,6) = a2
+%
+% Vehicle length:
+%   s_tail_i = s_head_i - L_platoon
+% ============================================================
+
+%% ── Extract state signals ────────────────────────────────────
+
+t_states = out.states.time(:);
+x_states = out.states.signals.values;
+
+s1_head = x_states(:,1);  v1_head = x_states(:,2);  a1_head = x_states(:,3);
+s2_head = x_states(:,4);  v2_head = x_states(:,5);  a2_head = x_states(:,6);
+
+s1_tail = s1_head - L_platoon;
+s2_tail = s2_head - L_platoon;
+
+%% ── Extract control input ────────────────────────────────────
+
+t_u   = out.u.time(:);
+u_raw = out.u.signals.values;
+u_mat = local_signal_to_matrix(u_raw, length(t_u));
+
+u1 = u_mat(:,1);
+if size(u_mat,2) >= 2
+    u2 = u_mat(:,2);
+else
+    u2 = nan(size(u1));
+end
+
+%% ── Extract objective & solver status ───────────────────────
+
+J             = squeeze(out.Objective_Value.signals.values);
+J             = J(:);
+t_J           = out.Objective_Value.time(:);
+
+solver_status = squeeze(out.status.signals.values);
+solver_status = solver_status(:);
+t_status      = out.status.time(:);
+
+%% ════════════════════════════════════════════════════════════
+% FIGURE 1 – Space-time trajectory
+% ════════════════════════════════════════════════════════════
+
+h.fig_traj = figure(i_fig);
+clf(h.fig_traj)
+hold on
+
+% ── Traffic-light phases (VECTORISED – one plot call per colour per TL) ──
+%
+% OLD approach: one plot() per time-step × per TL  → O(N·M) graphics objects
+% NEW approach: collect all green/red coords, two plot() calls per TL
+%
+tl_values = out.x_tl_hor.signals.values;   % [1 × nTL × nTime] or [nTL × nTime]
+tl_time   = out.x_tl_hor.time(:)';         % row vector  [1 × nTime]
+
+% Normalise to [nTL × nTime]
+tl_mat = squeeze(tl_values);               % removes singleton dims
+if isvector(tl_mat)
+    tl_mat = tl_mat(:)';                   % ensure row if only 1 TL
+end
+if size(tl_mat,1) ~= length(s_TL)
+    tl_mat = tl_mat';
+end
+
+for ii = 1:length(s_TL)
+    phase     = tl_mat(ii,:);             % 1 × nTime logical/double
+    green_idx = phase == 1;
+    red_idx   = ~green_idx;
+
+    % Green phase points
+    if any(green_idx)
+        hp = plot(tl_time(green_idx), ...
+                  s_TL(ii) * ones(1,sum(green_idx)), ...
+                  '.g', 'MarkerSize', 6);
+        hp.Annotation.LegendInformation.IconDisplayStyle = 'off';
+    end
+
+    % Red phase points
+    if any(red_idx)
+        hp = plot(tl_time(red_idx), ...
+                  s_TL(ii) * ones(1,sum(red_idx)), ...
+                  '.r', 'MarkerSize', 6);
+        hp.Annotation.LegendInformation.IconDisplayStyle = 'off';
+    end
+end
+
+% ── Bus stops (one plot() per stop) ──────────────────────────
+
+t_lim = [t_states(1) t_states(end)];
+for jj = 1:length(s_stop)
+    hp = plot(t_lim, [s_stop(jj) s_stop(jj)], '--k');
+    hp.Annotation.LegendInformation.IconDisplayStyle = 'off';
+end
+
+% ── Vehicle trajectories ──────────────────────────────────────
+
+h_v1_head = plot(t_states, s1_head, 'LineWidth', 2);
+h_v1_tail = plot(t_states, s1_tail, '--', 'Color', h_v1_head.Color, 'LineWidth', 1.5);
+
+h_v2_head = plot(t_states, s2_head, 'LineWidth', 2);
+h_v2_tail = plot(t_states, s2_tail, '--', 'Color', h_v2_head.Color, 'LineWidth', 1.5);
+
+grid on
+xlabel('Time [s]')
+ylabel('Covered distance [m]')
+legend([h_v1_head h_v1_tail h_v2_head h_v2_tail], ...
+       {'Vehicle 1 head','Vehicle 1 tail','Vehicle 2 head','Vehicle 2 tail'}, ...
+       'Location','best')
+title('Two finite-length vehicles: head/tail trajectories and traffic-light phases')
+
+%% ════════════════════════════════════════════════════════════
+% FIGURE 2 – Diagnostics  (5-panel tiled layout)
+% ════════════════════════════════════════════════════════════
+
+h.fig_diag = figure(i_fig+1);
+clf(h.fig_diag)
+
+tl_layout = tiledlayout(h.fig_diag, 5, 1, ...
+    'TileSpacing','compact','Padding','compact');
+
+t_lim = [t_states(1) t_states(end)];
+
+% ── Panel 1: Speed ────────────────────────────────────────────
+
+ax1 = nexttile(tl_layout);  hold(ax1,'on')
+plot(ax1, t_lim, [15 15], '--k', 'HandleVisibility','off')
+plot(ax1, t_lim, [50 50], '--k', 'HandleVisibility','off')
+plot(ax1, t_states, v1_head.*3.6, 'LineWidth', 2)
+plot(ax1, t_states, v2_head.*3.6, 'LineWidth', 2)
+grid(ax1,'on')
+xlabel(ax1,'Time [s]');  ylabel(ax1,'V [km/h]')
+ylim(ax1,[0 55])
+legend(ax1,{'Vehicle 1','Vehicle 2'},'Location','best')
+title(ax1,'Speed')
+
+% ── Panel 2: Acceleration ─────────────────────────────────────
+
+ax2 = nexttile(tl_layout);  hold(ax2,'on')
+plot(ax2, t_states, a1_head, 'LineWidth', 2)
+plot(ax2, t_states, a2_head, 'LineWidth', 2)
+grid(ax2,'on')
+xlabel(ax2,'Time [s]');  ylabel(ax2,'A_x [m/s^2]')
+legend(ax2,{'Vehicle 1','Vehicle 2'},'Location','best')
+title(ax2,'Longitudinal acceleration')
+
+% ── Panel 3: Control input ────────────────────────────────────
+
+ax3 = nexttile(tl_layout);  hold(ax3,'on')
+plot(ax3, t_u, u1, 'LineWidth', 2)
+if all(isfinite(u2))
+    plot(ax3, t_u, u2, 'LineWidth', 2)
+    legend(ax3,{'Vehicle 1','Vehicle 2'},'Location','best')
+else
+    legend(ax3,{'Vehicle 1'},'Location','best')
+end
+grid(ax3,'on')
+xlabel(ax3,'Time [s]');  ylabel(ax3,'u [m/s^3]')
+title(ax3,'Control input / jerk')
+
+% ── Panel 4: Objective function ───────────────────────────────
+
+ax4 = nexttile(tl_layout);
+plot(ax4, t_J, J, 'LineWidth', 2)
+grid(ax4,'on')
+xlabel(ax4,'Time [s]');  ylabel(ax4,'J [-]')
+title(ax4,'NMPC objective function')
+
+% ── Panel 5: Solver status ────────────────────────────────────
+
+ax5 = nexttile(tl_layout);
+stairs(ax5, t_status, solver_status, 'LineWidth', 2)
+hold(ax5,'on')
+yline(ax5, 0, '--k')
+grid(ax5,'on')
+xlabel(ax5,'Time [s]');  ylabel(ax5,'status [-]')
+title(ax5,'Solver status')
+
+s_range = max(solver_status(:)) - min(solver_status(:));
+if s_range == 0
+    ylim(ax5, [min(solver_status(:))-1  max(solver_status(:))+1])
+else
+    ylim(ax5, [min(solver_status(:))-1  max(solver_status(:))+1])
+end
+
+linkaxes([ax1 ax2 ax3 ax4 ax5], 'x')
+sgtitle(tl_layout, 'NMPC-BGLOSA diagnostics - two finite-length vehicles')
+
+%% ── Console report ───────────────────────────────────────────
+
+bad_idx = find(solver_status < 0);
+fprintf('\n=== NMPC diagnostics ===\n')
+if isempty(bad_idx)
+    fprintf('No negative solver status detected.\n')
+else
+    fprintf('Negative solver status detected at:\n')
+    disp(t_status(bad_idx))
+end
+
+end
+
+%% ── Local helper: Simulink signal → [nTime × nChannels] ─────
+
+function M = local_signal_to_matrix(values, n_time)
+
+values = squeeze(values);
+
+if isvector(values)
+    M = values(:);
+    return
+end
+
+if size(values,1) == n_time
+    M = values;
+elseif size(values,2) == n_time
+    M = values.';
+else
+    M = reshape(values, [], n_time).';
+end
+
+end
