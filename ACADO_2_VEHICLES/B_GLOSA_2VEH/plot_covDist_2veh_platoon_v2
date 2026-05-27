@@ -58,17 +58,15 @@ hold on
 % OLD approach: one plot() per time-step × per TL  → O(N·M) graphics objects
 % NEW approach: collect all green/red coords, two plot() calls per TL
 %
-tl_values = out.x_tl_hor.signals.values;   % [1 × nTL × nTime] or [nTL × nTime]
-tl_time   = out.x_tl_hor.time(:)';         % row vector  [1 × nTime]
+tl_values = out.x_tl_hor.signals.values;   % può essere N-D: es. [1 × nTL × nTime]
+tl_time   = out.x_tl_hor.time(:)';         % row vector [1 × nTime]
 
-% Normalise to [nTL × nTime]
-tl_mat = squeeze(tl_values);               % removes singleton dims
-if isvector(tl_mat)
-    tl_mat = tl_mat(:)';                   % ensure row if only 1 TL
-end
-if size(tl_mat,1) ~= length(s_TL)
-    tl_mat = tl_mat';
-end
+nTL   = length(s_TL);
+nTime = length(tl_time);
+
+% Appiattisce in modo sicuro qualsiasi array N-D -> [nTL x nTime]
+% senza usare transpose (') che non supporta N-D
+tl_mat = reshape(tl_values, nTL, nTime);
 
 for ii = 1:length(s_TL)
     phase     = tl_mat(ii,:);             % 1 × nTime logical/double
