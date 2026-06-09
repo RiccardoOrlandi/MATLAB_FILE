@@ -65,8 +65,8 @@ s_max = 5200;          % lunghezza path [m]
 t_dwell = 10;         % dwell time nominale [s], gestito online
 V_max = 50/3.6;       % limite statico per vincoli dwell [m/s]
 
-Ax_min = -1.5;        % limite inferiore accelerazione longitudinale [m/s^2]
-Ax_max =  1.5;        % limite superiore accelerazione longitudinale [m/s^2]
+Ax_min = -1.15;        % limite inferiore accelerazione longitudinale [m/s^2]
+Ax_max =  1.15;        % limite superiore accelerazione longitudinale [m/s^2]
 Ay_max =  2.0;        % limite accelerazione laterale [m/s^2]
 
 jerk_min = -0.5;      % limite inferiore jerk [m/s^3]
@@ -182,7 +182,7 @@ ocp.subjectTo(is(vel * vel * k_road - Ay_max) <= 0);
 
 ocp.subjectTo(is(vel - Vmax) <= 0);
 
-v_eps = 0.01;
+v_eps = 0.02;
 ocp.subjectTo(vel >= -v_eps);
 
 %--------------------------------------------------------------------------
@@ -236,7 +236,7 @@ mpc.set('HESSIAN_APPROXIMATION',       'GAUSS_NEWTON');
 mpc.set('DISCRETIZATION_TYPE',         'MULTIPLE_SHOOTING');
 mpc.set('SPARSE_QP_SOLUTION',          'FULL_CONDENSING_N2');
 mpc.set('INTEGRATOR_TYPE',             'INT_RK4');
-mpc.set('NUM_INTEGRATOR_STEPS',        2);
+mpc.set('NUM_INTEGRATOR_STEPS',        50);
 mpc.set('QP_SOLVER',                   'QP_QPOASES3');
 mpc.set('GENERATE_SIMULINK_INTERFACE', 'YES');
 mpc.set('LEVENBERG_MARQUARDT',         1e-4);

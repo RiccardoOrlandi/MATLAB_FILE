@@ -26,19 +26,19 @@
 %  7  cost_dwell_acc     accelerazione nulla durante dwell
 
 Qx1 = [ ...
-    30, ...    % distance progress, coerente con veicolo 1 della versione 3-veh
-     2, ...    % jerk
-     0.5, ...  % longitudinal acceleration
-    50, ...    % stop target attraction
-   200, ...    % dwell position
-   500, ...    % dwell velocity
-   100];       % dwell acceleration
+    200, ...    % distance progress, coerente con veicolo 1 della versione 3-veh
+     50, ...    % jerk
+     20, ...  % longitudinal acceleration
+    30, ...    % stop target attraction
+   10, ...    % dwell position
+   10, ...    % dwell velocity
+   10];       % dwell acceleration
 
 W1 = diag(Qx1);
 NMPC_Wmat1 = reshape(W1.',1,[]);
 
 % Terminal cost: avanzamento terminale del veicolo rigido.
-QN1 = 30;
+QN1 = 50;
 WN1 = diag(QN1);
 NMPC_WNmat1 = reshape(WN1.',1,[]);
 
@@ -64,7 +64,7 @@ N = 50;
 Vmax = 50;
 
 % Stato iniziale ACADO: [pos vel acc]
-xInit = [0 2 0];
+xInit = [0 0 0];
 
 % Nuova formulazione: un solo controllo, il jerk.
 % Le vecchie componenti s_Vmax e s_Ay sono state eliminate.

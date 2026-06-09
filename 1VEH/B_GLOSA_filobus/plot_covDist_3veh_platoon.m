@@ -1,10 +1,20 @@
-function h = plot_covDist_1veh(out, i_fig, s_TL, s_stop, L_platoon)
+function h = plot_covDist_3veh_platoon(out, i_fig, s_TL, s_stop, L_platoon)
 % ============================================================
-% PLOT_COVDIST_1VEH
-% Genera 3 figure (stessa struttura di plot_covDist_3veh_platoon):
+% PLOT_COVDIST_3VEH_PLATOON  –  adattata per 1 veicolo (B-GLOSA filobus)
+%
+% Genera 3 figure:
 %   Fig i_fig   - Traiettoria spazio-tempo + fasi TL + fermate
 %   Fig i_fig+1 - Jerk / Velocita' / Accelerazione
 %   Fig i_fig+2 - Execution time / Objective / nIteration / Solver status
+%
+% Struttura out attesa (variabili To Workspace del Simulink):
+%   out.states          [time x 3]   s, v, a
+%   out.u               [time x 1]   jerk
+%   out.Objective_Value [time x 1]
+%   out.status          [time x 1]
+%   out.nIteration      [time x 1]
+%   out.executionTime   [time x 1]   in secondi
+%   out.x_tl_hor        [1 x nTL x time]
 % ============================================================
 
 %% ----------------------------------------------------------
@@ -12,22 +22,22 @@ function h = plot_covDist_1veh(out, i_fig, s_TL, s_stop, L_platoon)
 %  ----------------------------------------------------------
 
 t_st = out.states.time(:);
-xs   = squeeze(out.states.signals.values);
+xs   = squeeze(out.states.signals.values);   % [Nt x 3]
 
 if size(xs,2) < 3
     error('out.states deve avere almeno 3 colonne: [s v a].');
 end
 
-s1  = xs(:,1);  v1 = xs(:,2);  a1 = xs(:,3);
+s1 = xs(:,1);  v1 = xs(:,2);  a1 = xs(:,3);
 s1t = s1 - L_platoon;
 
 %% ----------------------------------------------------------
-%  2. ESTRAZIONE CONTROLLO
+%  2. ESTRAZIONE CONTROLLI
 %  ----------------------------------------------------------
 
 t_u = out.u.time(:);
-u1  = squeeze(out.u.signals.values);
-u1  = u1(:);
+u1  = local_to_col(out.u.signals.values, length(t_u));
+u1  = u1(:,1);
 
 %% ----------------------------------------------------------
 %  3. ESTRAZIONE SEGNALI DI DIAGNOSTICA
@@ -65,9 +75,9 @@ t_tl   = out.x_tl_hor.time(:);
 nT     = length(t_tl);
 nTL    = length(s_TL);
 tl_raw = out.x_tl_hor.signals.values;
-tl_st  = squeeze(tl_raw(1, 1:nTL, 1:nT));
+tl_st  = squeeze(tl_raw(1, 1:nTL, 1:nT));   % [nTL x nT]
 if size(tl_st,1) == nTL && size(tl_st,2) == nT
-    tl_st = tl_st.';
+    tl_st = tl_st.';                          % -> [nT x nTL]
 end
 nT_eff  = min(size(tl_st,1), nT);
 nTL_eff = min(size(tl_st,2), nTL);
@@ -92,7 +102,7 @@ hh(2) = plot(t_st, s1t, '--', 'Color', cV1, 'LineWidth', lw);
 
 grid on; box on;
 xlabel('Tempo [s]');  ylabel('Posizione [m]');
-legend(hh, {'Veh 1 testa', 'Veh 1 coda'}, 'Location', 'best');
+legend(hh, {'Veh 1 testa','Veh 1 coda'}, 'Location', 'best');
 title('Traiettoria spazio-tempo – fasi TL e fermate bus');
 
 %% ==========================================================
@@ -184,9 +194,9 @@ ylim(ax_n, [0, max(nIter(:))*1.15 + 1]);
 ax_s = nexttile(tl3);
 hold(ax_s, 'on');
 bad_mask = stat < 0;
-bad_t    = t_st2(bad_mask);
 y_lo = min(stat) - 1.5;  y_hi = max(stat) + 1.5;
-if y_lo == y_hi;  y_lo = y_lo - 1;  y_hi = y_hi + 1;  end
+if y_lo == y_hi; y_lo = y_lo - 1; y_hi = y_hi + 1; end
+bad_t = t_st2(bad_mask);
 for bi = 1:length(bad_t)
     patch(ax_s, [bad_t(bi)-0.5 bad_t(bi)+0.5 bad_t(bi)+0.5 bad_t(bi)-0.5], ...
           [y_lo y_lo y_hi y_hi], [1 0.7 0.7], 'FaceAlpha', 0.5, 'EdgeColor', 'none');
@@ -197,7 +207,7 @@ grid(ax_s, 'on'); box(ax_s, 'on');
 ylabel(ax_s, 'status [-]');
 xlabel(ax_s, 'Tempo [s]');
 st_lims = [min(stat)-1, max(stat)+1];
-if st_lims(1) == st_lims(2);  st_lims = st_lims + [-1 1];  end
+if st_lims(1) == st_lims(2); st_lims = st_lims + [-1 1]; end
 ylim(ax_s, st_lims);
 n_bad = sum(bad_mask);
 title(ax_s, sprintf('Solver status    0=OK  -2=infeasible  +1=maxIter   (%d step negativi)', n_bad));
@@ -210,8 +220,8 @@ sgtitle(tl3, 'Diagnostica solver NMPC – veicolo singolo');
 %  ----------------------------------------------------------
 
 fprintf("\n=== Riepilogo simulazione ===\n");
-fprintf("  s_head  = [%.1f  %.1f] m\n",    min(s1),  max(s1));
-fprintf("  v       = [%.2f  %.2f] km/h\n", min(v1)*3.6, max(v1)*3.6);
+fprintf("  s_head  = [%.1f  %.1f] m\n",   min(s1),  max(s1));
+fprintf("  v       = [%.2f  %.2f] km/h\n",min(v1)*3.6, max(v1)*3.6);
 fprintf("  a       = [%.3f  %.3f] m/s^2\n",min(a1), max(a1));
 fprintf("  |u1|max = %.4f m/s3\n",         max(abs(u1)));
 fprintf("  J max   = %.2f\n",              max(J));
@@ -222,4 +232,21 @@ n_bad = sum(stat < 0);
 fprintf("  status<0  = %d step (%.1f%%)\n", n_bad, 100*n_bad/length(stat));
 fprintf("==============================\n");
 
+end
+
+%% ----------------------------------------------------------
+%%  LOCAL: converte segnale Simulink in [Nt x nCh]
+%% ----------------------------------------------------------
+
+function M = local_to_col(values, n_time)
+values = squeeze(values);
+if isvector(values)
+    M = values(:);
+elseif size(values,1) == n_time
+    M = values;
+elseif size(values,2) == n_time
+    M = values.';
+else
+    M = reshape(values,[],n_time).';
+end
 end

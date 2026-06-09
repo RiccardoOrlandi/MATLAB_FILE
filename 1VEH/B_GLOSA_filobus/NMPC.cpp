@@ -95,7 +95,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     Function acadodata_f1;
     acadodata_f1 << 1/5.20000000000000000000e+03*intS4;
     acadodata_f1 << 1/5.00000000000000000000e-01*intS5;
-    acadodata_f1 << 1/1.50000000000000000000e+00*intS6;
+    acadodata_f1 << 1/1.14999999999999991118e+00*intS6;
     acadodata_f1 << intS7;
     acadodata_f1 << intS8;
     acadodata_f1 << intS9;
@@ -108,8 +108,8 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     IntermediateState intS14 = (-(1.00000000000000000000e+00-x_dwell_active)*5.20000000000000000000e+03-(5.00000000000000000000e-01+s_stop_active)*x_dwell_active+pos);
     IntermediateState intS15 = ((-5.00000000000000000000e-01+s_stop_active)*x_dwell_active-(1.00000000000000000000e+00-x_dwell_active)*5.20000000000000000000e+03-pos);
     IntermediateState intS16 = (-(1.00000000000000000000e+00-x_dwell_active)*1.38888888888888892836e+01-1.00000000000000005551e-01*x_dwell_active+vel);
-    IntermediateState intS17 = (-(1.00000000000000000000e+00-x_dwell_active)*1.50000000000000000000e+00-2.99999999999999988898e-01*x_dwell_active+acc);
-    IntermediateState intS18 = ((1.00000000000000000000e+00-x_dwell_active)*1.50000000000000000000e+00+2.99999999999999988898e-01*x_dwell_active+acc);
+    IntermediateState intS17 = (-(1.00000000000000000000e+00-x_dwell_active)*1.14999999999999991118e+00-2.99999999999999988898e-01*x_dwell_active+acc);
+    IntermediateState intS18 = ((1.00000000000000000000e+00-x_dwell_active)*1.14999999999999991118e+00+2.99999999999999988898e-01*x_dwell_active+acc);
     IntermediateState intS19 = (-(1.00000000000000000000e+00-x_TL1)*s_TL1_active-5.20000000000000000000e+03*x_TL1+pos);
     IntermediateState intS20 = (-(1.00000000000000000000e+00-x_TL2)*s_TL2_active-5.20000000000000000000e+03*x_TL2+pos);
     IntermediateState intS21 = (-(1.00000000000000000000e+00-x_TL3)*s_TL3_active-5.20000000000000000000e+03*x_TL3+pos);
@@ -121,13 +121,13 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     OCP ocp1(0, 50, 50);
     ocp1.minimizeLSQ(acadodata_M1, acadodata_f1);
     ocp1.minimizeLSQEndTerm(acadodata_M2, acadodata_f2);
-    ocp1.subjectTo(acc <= 1.50000000000000000000e+00);
-    ocp1.subjectTo(acc >= (-1.50000000000000000000e+00));
+    ocp1.subjectTo(acc <= 1.14999999999999991118e+00);
+    ocp1.subjectTo(acc >= (-1.14999999999999991118e+00));
     ocp1.subjectTo(jerk <= 5.00000000000000000000e-01);
     ocp1.subjectTo(jerk >= (-5.00000000000000000000e-01));
     ocp1.subjectTo(intS11 <= 0.00000000000000000000e+00);
     ocp1.subjectTo(intS12 <= 0.00000000000000000000e+00);
-    ocp1.subjectTo(vel >= (-1.00000000000000002082e-02));
+    ocp1.subjectTo(vel >= (-2.00000000000000004163e-02));
     ocp1.subjectTo(intS13 <= 0.00000000000000000000e+00);
     ocp1.subjectTo(intS14 <= 0.00000000000000000000e+00);
     ocp1.subjectTo(intS15 <= 0.00000000000000000000e+00);
@@ -164,7 +164,7 @@ void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
     if(options_flag != 0) mexErrMsgTxt("ACADO export failed when setting the following option: SPARSE_QP_SOLUTION");
     options_flag = ExportModule1.set( INTEGRATOR_TYPE, INT_RK4 );
     if(options_flag != 0) mexErrMsgTxt("ACADO export failed when setting the following option: INTEGRATOR_TYPE");
-    options_flag = ExportModule1.set( NUM_INTEGRATOR_STEPS, 2 );
+    options_flag = ExportModule1.set( NUM_INTEGRATOR_STEPS, 50 );
     if(options_flag != 0) mexErrMsgTxt("ACADO export failed when setting the following option: NUM_INTEGRATOR_STEPS");
     options_flag = ExportModule1.set( QP_SOLVER, QP_QPOASES3 );
     if(options_flag != 0) mexErrMsgTxt("ACADO export failed when setting the following option: QP_SOLVER");
