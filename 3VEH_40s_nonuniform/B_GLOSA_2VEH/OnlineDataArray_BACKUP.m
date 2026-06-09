@@ -27,7 +27,7 @@ function [OnlineData, reached_TL, reached_TL_2, reached_TL_3, reached_stop, reac
 %   VEICOLO 2: indici 22 - 42, stessa struttura del veicolo 1
 %   VEICOLO 3: indici 43 - 63, stessa struttura del veicolo 1
 %
-% state_pred_old deve essere 51x9, con colonne:
+% state_pred_old deve essere 41x9, con colonne:
 %   [pos vel acc pos2 vel2 acc2 pos3 vel3 acc3]
 %==========================================================================
 
@@ -37,10 +37,28 @@ function [OnlineData, reached_TL, reached_TL_2, reached_TL_3, reached_stop, reac
 
 N_od    = 63;
 K_tl    = 4;
-N_tl    = 11;
+N_tl    = 30;
 N_stops = 7;
-N       = 50;
-Ts      = 1.0;
+% Griglia NMPC non uniforme:
+% nodi 1..21  -> 0:1:20 s
+% nodi 22..41 -> 21.5:1.5:50 s
+N_near  = 20;
+N_far   = 25;
+Ts_near = 1.0;
+Ts_far  = 1.2;
+
+N  = N_near + N_far;   % 40 intervalli
+Ts = 1.0;              % sampling time del controller, NON della griglia OCP
+
+time_grid = zeros(N+1,1);
+
+for kk = 1:N+1
+    if kk <= N_near + 1
+        time_grid(kk) = (kk-1)*Ts_near;
+    else
+        time_grid(kk) = N_near*Ts_near + (kk-(N_near+1))*Ts_far;
+    end
+end
 
 %---------------------------- vehicle 1 -----------------------------------
 idx_head0        = 0;    % 1  - 4
@@ -84,9 +102,11 @@ idx_shor_3         = 55;
 idx_tail0_3        = 55; % 56 - 59
 idx_sTL0_3         = 59; % 60 - 63
 
-L_platoon = 8;  % [m]
+L_platoon = 7.8;  % [m]
 
-s_TL   = [45.5, 203.2, 384.2, 589.4, 773.6, 1004.2, 1225.3, 1419.7, 1507.8, 1739.0, 1823.0];
+s_TL = [45.5, 203.2, 384.2, 589.4, 773.6, 1004.2, 1225.3, 1419.7, 1507.8, 1739.0, ...
+        1823.0, 1948.9, 2046.6, 2287.9, 2421.5, 2635.8, 2683.8, 2773.9, 2800.2, 2828.4, ...
+        2981.4, 3232.6, 3420.6, 3600.4, 3764.9, 4051.8, 4215.6, 4434.6, 4648.9, 5107.8];
 s_stop = [80, 447, 756, 1084, 1304, 1507, 1822];
 s_max  = 5200;
 
@@ -295,17 +315,16 @@ reached_TL_3 = local_update_reached_memory_only(reached_TL_old_3, s_TL, pos_hor_
 [OnlineData, reached_TL, debug_TL, red_stopline_hold, s_hold] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx_1, s_TL_active_1, ...
     pos_hor, pos_hor_tail, vel_hor, Vmax, reached_TL_old, reached_TL, debug_TL, ...
-    time_cur, N, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold);
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold);
 
 [OnlineData, reached_TL_2, debug_TL_2, red_stopline_hold2, s_hold2] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx_2, s_TL_active_2, ...
     pos_hor_2, pos_hor_tail_2, vel_hor_2, Vmax_2, reached_TL_old_2, reached_TL_2, debug_TL_2, ...
-    time_cur, N, N_od, K_tl, idx_tail0_2, idx_head0_2, eps_TL_hold);
-
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0_2, idx_head0_2, eps_TL_hold);
 [OnlineData, reached_TL_3, debug_TL_3, red_stopline_hold3, s_hold3] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx_3, s_TL_active_3, ...
     pos_hor_3, pos_hor_tail_3, vel_hor_3, Vmax_3, reached_TL_old_3, reached_TL_3, debug_TL_3, ...
-    time_cur, N, N_od, K_tl, idx_tail0_3, idx_head0_3, eps_TL_hold);
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0_3, idx_head0_3, eps_TL_hold);
 
 end
 
@@ -392,7 +411,8 @@ if next_stop_idx > 0
 
     for kk = 2:N+1
         idx0 = N_od*(kk-1);
-        OnlineData(idx0 + idx_sstop_active) = s_active;
+        eps_margin = 0.05;
+        OnlineData(idx0 + idx_sstop_active) = s_active -eps_margin;
 
         if stop_in_dwell_now(jj) == 1
             OnlineData(idx0 + idx_xstop_active) = 1;
@@ -491,8 +511,7 @@ end
 function [OnlineData, reached_TL, debug_TL, red_stopline_hold, s_hold] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx, s_TL_active, ...
     pos_hor, pos_hor_tail, vel_hor, Vmax_local, reached_TL_old, reached_TL, debug_TL, ...
-    time_cur, N, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold)
-
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold)
 red_stopline_hold = 0.0;
 s_hold            = 0.0;
 
@@ -749,7 +768,7 @@ for jj_slot = 1:K_tl
                     end
                 end
 
-                kk_tail_clear_est = ceil(t_clear_tail/1.0) + 1;
+                kk_tail_clear_est = local_time_to_node_index(t_clear_tail, time_grid, N);
                 if kk_tail_clear_est < 2
                     kk_tail_clear_est = 2;
                 end
@@ -1065,5 +1084,20 @@ while kk <= N+1 && x_TL(kk,ii) == 1
     green_end = kk;
     kk = kk + 1;
 end
+end
+%==========================================================================
+% LOCAL FUNCTION: MAP CONTINUOUS TIME TO NON-UNIFORM NODE INDEX
+%==========================================================================
+function idx_node = local_time_to_node_index(t_query, time_grid, N)
+
+idx_node = N + 1;
+
+for kk = 1:N+1
+    if time_grid(kk) >= t_query
+        idx_node = kk;
+        return
+    end
+end
 
 end
+

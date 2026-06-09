@@ -1,4 +1,4 @@
-function [OnlineData, reached_TL, reached_TL_2, reached_TL_3, reached_stop, reached_stop_2, reached_stop_3, t_piola, t_loreto, debug_TL, debug_TL_2, debug_TL_3, stop_dwell_count, stop_dwell_count_2, stop_dwell_count_3, red_stopline_hold, s_hold, red_stopline_hold2, s_hold2, red_stopline_hold3, s_hold3] = OnlineDataArray( x_TL, stop_enabled, Vmax, Vmax_2, Vmax_3, state_pred_old, t_dwell, time_cur, reached_TL_old, reached_TL_old_2, reached_TL_old_3, reached_stop_old, reached_stop_old_2, reached_stop_old_3, t_piola_old, t_loreto_old, stop_dwell_count_old, stop_dwell_count_old_2, stop_dwell_count_old_3, k_road_hor, k_road_hor_2, k_road_hor_3, timepoints)
+function [OnlineData, reached_TL, reached_TL_2, reached_TL_3, reached_stop, reached_stop_2, reached_stop_3, t_piola, t_loreto, debug_TL, debug_TL_2, debug_TL_3, stop_dwell_count, stop_dwell_count_2, stop_dwell_count_3, red_stopline_hold, s_hold, red_stopline_hold2, s_hold2, red_stopline_hold3, s_hold3] = OnlineDataArray( x_TL, stop_enabled, Vmax, Vmax_2, Vmax_3, state_pred_old, t_dwell, time_cur, reached_TL_old, reached_TL_old_2, reached_TL_old_3, reached_stop_old, reached_stop_old_2, reached_stop_old_3, t_piola_old, t_loreto_old, stop_dwell_count_old, stop_dwell_count_old_2, stop_dwell_count_old_3, k_road_hor, k_road_hor_2, k_road_hor_3)
 %==========================================================================
 % ONLINE DATA ARRAY - NMPC B-GLOSA 3 VEHICLES
 % Versione K4 con finestre semaforiche indipendenti per i tre veicoli.
@@ -27,7 +27,7 @@ function [OnlineData, reached_TL, reached_TL_2, reached_TL_3, reached_stop, reac
 %   VEICOLO 2: indici 22 - 42, stessa struttura del veicolo 1
 %   VEICOLO 3: indici 43 - 63, stessa struttura del veicolo 1
 %
-% state_pred_old deve essere (N+1)x9 = 41x9, con colonne:
+% state_pred_old deve essere 41x9, con colonne:
 %   [pos vel acc pos2 vel2 acc2 pos3 vel3 acc3]
 %==========================================================================
 
@@ -39,8 +39,26 @@ N_od    = 63;
 K_tl    = 4;
 N_tl    = 30;
 N_stops = 7;
-N       = 40;  % NON-UNIFORM GRID\n\n%% Vettore dei tempi dell'orizzonte predittivo\n%  timepoints e' opzionale: se non passato si assume griglia uniforme Ts=1s (compatibilita')\nif nargin < 23 || isempty(timepoints)\n    timepoints = (0:N) * Ts;  % fallback uniforme\nend\nt_hor = timepoints(:);   % (N+1)x1, tempo assoluto di ogni nodo rispetto a time_cur\n
-Ts      = 1.0;
+% Griglia NMPC non uniforme:
+% nodi 1..21  -> 0:1:20 s
+% nodi 22..41 -> 21.5:1.5:50 s
+N_near  = 20;
+N_far   = 25;
+Ts_near = 1.0;
+Ts_far  = 1.2;
+
+N  = N_near + N_far;   % 40 intervalli
+Ts = 1.0;              % sampling time del controller, NON della griglia OCP
+
+time_grid = zeros(N+1,1);
+
+for kk = 1:N+1
+    if kk <= N_near + 1
+        time_grid(kk) = (kk-1)*Ts_near;
+    else
+        time_grid(kk) = N_near*Ts_near + (kk-(N_near+1))*Ts_far;
+    end
+end
 
 %---------------------------- vehicle 1 -----------------------------------
 idx_head0        = 0;    % 1  - 4
@@ -84,11 +102,13 @@ idx_shor_3         = 55;
 idx_tail0_3        = 55; % 56 - 59
 idx_sTL0_3         = 59; % 60 - 63
 
-L_platoon = 8;  % [m]
+L_platoon = 7.8;  % [m]
+gap_min   = 0.001;   % [m] vincolo hard gap (deve coincidere con ACADO_3veh_4TL.m r.111)
+gap_wall_safety = 1.0;  % [m] margine di sicurezza aggiuntivo sul clamp della wall fermata
 
-s_TL   = [45.5, 203.2, 384.2, 589.4, 773.6, 1004.2, 1225.3, 1419.7, 1507.8, 1739.0, ...
-           1823.0, 1948.9, 2046.6, 2287.9, 2421.5, 2635.8, 2683.8, 2773.9, 2800.2, 2828.4, ...
-           2981.4, 3232.6, 3420.6, 3600.4, 3764.9, 4051.8, 4215.6, 4434.6, 4648.9, 5107.8];
+s_TL = [45.5, 203.2, 384.2, 589.4, 773.6, 1004.2, 1225.3, 1419.7, 1507.8, 1739.0, ...
+        1823.0, 1948.9, 2046.6, 2287.9, 2421.5, 2635.8, 2683.8, 2773.9, 2800.2, 2828.4, ...
+        2981.4, 3232.6, 3420.6, 3600.4, 3764.9, 4051.8, 4215.6, 4434.6, 4648.9, 5107.8];
 s_stop = [80, 447, 756, 1084, 1304, 1507, 1822];
 s_max  = 5200;
 
@@ -96,7 +116,7 @@ dt_schd_default = 180;
 s_st_default    = 1e5;
 s_hor_default   = 300;
 
-%% Dwell steps: contiamo i nodi in cui il dwell e' attivo.\n%  Con griglia non-uniforme, i nodi del dwell cadono tipicamente\n%  nella zona fine (Ts=1s), quindi usiamo Ts_fine=1s come riferimento.\nTs_fine_local = timepoints(2) - timepoints(1);  % primo passo della griglia\nN_dwell_steps = max(1, round(t_dwell / Ts_fine_local));
+N_dwell_steps = max(1, round(t_dwell/Ts));
 
 eps_stop_dwell = 0.8;   % [m]
 eps_vel_dwell  = 0.05;  % [m/s]
@@ -250,17 +270,20 @@ end
 [OnlineData, reached_stop, stop_dwell_count] = local_update_stop_online_data( ...
     OnlineData, reached_stop, reached_stop_old, stop_dwell_count, stop_enabled, ...
     s_stop, s_now, v_now, N_stops, N_dwell_steps, eps_stop_dwell, eps_vel_dwell, ...
-    N, N_od, idx_sstop_active, idx_xstop_active, idx_xdwell_active, idx_wstop_active);
+    N, N_od, idx_sstop_active, idx_xstop_active, idx_xdwell_active, idx_wstop_active, ...
+    [], L_platoon, gap_min, gap_wall_safety);  % veh1: nessun leader
 
 [OnlineData, reached_stop_2, stop_dwell_count_2] = local_update_stop_online_data( ...
     OnlineData, reached_stop_2, reached_stop_old_2, stop_dwell_count_2, stop_enabled, ...
     s_stop, s_now_2, v_now_2, N_stops, N_dwell_steps, eps_stop_dwell, eps_vel_dwell, ...
-    N, N_od, idx_sstop_active_2, idx_xstop_active_2, idx_xdwell_active_2, idx_wstop_active_2);
+    N, N_od, idx_sstop_active_2, idx_xstop_active_2, idx_xdwell_active_2, idx_wstop_active_2, ...
+    pos_hor, L_platoon, gap_min, gap_wall_safety);  % veh2: leader = veh1
 
 [OnlineData, reached_stop_3, stop_dwell_count_3] = local_update_stop_online_data( ...
     OnlineData, reached_stop_3, reached_stop_old_3, stop_dwell_count_3, stop_enabled, ...
     s_stop, s_now_3, v_now_3, N_stops, N_dwell_steps, eps_stop_dwell, eps_vel_dwell, ...
-    N, N_od, idx_sstop_active_3, idx_xstop_active_3, idx_xdwell_active_3, idx_wstop_active_3);
+    N, N_od, idx_sstop_active_3, idx_xstop_active_3, idx_xdwell_active_3, idx_wstop_active_3, ...
+    pos_hor_2, L_platoon, gap_min, gap_wall_safety);  % veh3: leader = veh2
 
 %=========================================================================
 % TRAFFIC LIGHT SLOT SELECTION - INDEPENDENT FOR EACH VEHICLE
@@ -297,17 +320,16 @@ reached_TL_3 = local_update_reached_memory_only(reached_TL_old_3, s_TL, pos_hor_
 [OnlineData, reached_TL, debug_TL, red_stopline_hold, s_hold] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx_1, s_TL_active_1, ...
     pos_hor, pos_hor_tail, vel_hor, Vmax, reached_TL_old, reached_TL, debug_TL, ...
-    time_cur, N, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold);
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold);
 
 [OnlineData, reached_TL_2, debug_TL_2, red_stopline_hold2, s_hold2] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx_2, s_TL_active_2, ...
     pos_hor_2, pos_hor_tail_2, vel_hor_2, Vmax_2, reached_TL_old_2, reached_TL_2, debug_TL_2, ...
-    time_cur, N, N_od, K_tl, idx_tail0_2, idx_head0_2, eps_TL_hold);
-
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0_2, idx_head0_2, eps_TL_hold);
 [OnlineData, reached_TL_3, debug_TL_3, red_stopline_hold3, s_hold3] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx_3, s_TL_active_3, ...
     pos_hor_3, pos_hor_tail_3, vel_hor_3, Vmax_3, reached_TL_old_3, reached_TL_3, debug_TL_3, ...
-    time_cur, N, N_od, K_tl, idx_tail0_3, idx_head0_3, eps_TL_hold);
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0_3, idx_head0_3, eps_TL_hold);
 
 end
 
@@ -317,7 +339,8 @@ end
 function [OnlineData, reached_stop, stop_dwell_count] = local_update_stop_online_data( ...
     OnlineData, reached_stop, reached_stop_old, stop_dwell_count, stop_enabled, ...
     s_stop, s_now, v_now, N_stops, N_dwell_steps, eps_stop_dwell, eps_vel_dwell, ...
-    N, N_od, idx_sstop_active, idx_xstop_active, idx_xdwell_active, idx_wstop_active)
+    N, N_od, idx_sstop_active, idx_xstop_active, idx_xdwell_active, idx_wstop_active, ...
+    pos_leader, L_pl, gap_min_hard, gap_wall_safety)
 
 stop_in_dwell_now = zeros(1,N_stops);
 reached_stop = reached_stop_old;
@@ -394,7 +417,19 @@ if next_stop_idx > 0
 
     for kk = 2:N+1
         idx0 = N_od*(kk-1);
-        OnlineData(idx0 + idx_sstop_active) = s_active;
+        eps_margin = 0.05;
+        s_wall_stop = s_active - eps_margin;
+        if ~isempty(pos_leader)
+            % Clamp: la wall su questo veicolo non puo' superare la posizione
+            % del veicolo leader meno il gap fisico richiesto.
+            % Questo evita infeasibility quando il leader e' appena ripartito
+            % dalla fermata ed e' ancora molto lento.
+            s_wall_lead = pos_leader(kk) - L_pl - gap_min_hard - gap_wall_safety;
+            s_wall = min(s_wall_stop, s_wall_lead);
+        else
+            s_wall = s_wall_stop;
+        end
+        OnlineData(idx0 + idx_sstop_active) = s_wall;
 
         if stop_in_dwell_now(jj) == 1
             OnlineData(idx0 + idx_xstop_active) = 1;
@@ -493,8 +528,7 @@ end
 function [OnlineData, reached_TL, debug_TL, red_stopline_hold, s_hold] = local_update_tl_slots_for_vehicle( ...
     OnlineData, x_TL, s_TL, active_TL_idx, s_TL_active, ...
     pos_hor, pos_hor_tail, vel_hor, Vmax_local, reached_TL_old, reached_TL, debug_TL, ...
-    time_cur, N, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold)
-
+    time_cur, N, time_grid, N_od, K_tl, idx_tail0, idx_head0, eps_TL_hold)
 red_stopline_hold = 0.0;
 s_hold            = 0.0;
 
@@ -751,7 +785,7 @@ for jj_slot = 1:K_tl
                     end
                 end
 
-                kk_tail_clear_est = ceil(t_clear_tail/1.0) + 1;
+                kk_tail_clear_est = local_time_to_node_index(t_clear_tail, time_grid, N);
                 if kk_tail_clear_est < 2
                     kk_tail_clear_est = 2;
                 end
@@ -1067,5 +1101,20 @@ while kk <= N+1 && x_TL(kk,ii) == 1
     green_end = kk;
     kk = kk + 1;
 end
+end
+%==========================================================================
+% LOCAL FUNCTION: MAP CONTINUOUS TIME TO NON-UNIFORM NODE INDEX
+%==========================================================================
+function idx_node = local_time_to_node_index(t_query, time_grid, N)
+
+idx_node = N + 1;
+
+for kk = 1:N+1
+    if time_grid(kk) >= t_query
+        idx_node = kk;
+        return
+    end
+end
 
 end
+

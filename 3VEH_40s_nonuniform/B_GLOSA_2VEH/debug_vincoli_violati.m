@@ -55,12 +55,12 @@ idx_user = [];                  % [] -> usa automaticamente uno step trovato
 fail_to_analyze = 1;            % se idx_user = [], analizza il k-esimo errore
                                 % trovato in idx_fail_all
 
-N    = 50;                      % prediction horizon ACADO
+N    = 40;                      % prediction horizon ACADO
 nx   = 9;                       % [pos vel acc pos2 vel2 acc2 pos3 vel3 acc3]
 nu   = 3;                       % [jerk jerk2 jerk3]
 nod  = 63;                      % 21 OnlineData per veicolo x 3 veicoli
 tol  = 1e-7;                    % tolleranza violazione vincoli
-nshow = 50;                     % numero righe da stampare
+nshow = 45;                     % numero righe da stampare
 
 %%=========================================================================
 % 2. CARICAMENTO LOG DAL WORKSPACE
@@ -136,10 +136,13 @@ fprintf('Numero status -30: %d\n',sum(status_int == -30));
 
 if isempty(idx_user)
 
-    if fail_to_analyze < 1 || fail_to_analyze > numel(idx_fail_all)
-        error(['fail_to_analyze fuori range. Valore = %d, ', ...
-               'range valido = [1, %d].'], ...
-               fail_to_analyze, numel(idx_fail_all));
+    n_found = numel(idx_fail_all);
+    if fail_to_analyze > n_found
+        fprintf(">> fail_to_analyze=%d ma ci sono solo %d step in errore. Uso il primo.\\n", fail_to_analyze, n_found);
+        fail_to_analyze = 1;
+    end
+    if fail_to_analyze < 1
+        fail_to_analyze = 1;
     end
 
     idx_fail = idx_fail_all(fail_to_analyze);

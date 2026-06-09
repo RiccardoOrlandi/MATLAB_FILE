@@ -1,0 +1,71 @@
+NOTA: sembra che il 3 veicolo non veda il semaforo rosso nell'orizzonte e quando lo vede genera una frenata fortissima che causa errore perche impne un jerk minimo assurdo 
+========================================================================
+  PARAMETRI SIMULAZIONE  -  B-GLOSA  3VEH  4TL
+  Griglia non uniforme: 20 near (1.0 s) + 20 far (1.2 s)
+========================================================================
+
+------------------------------------------------------------------------
+ [1] ORIZZONTE PREDITTIVO
+------------------------------------------------------------------------
+  N              = 40          intervalli OCP (nodi = 41)
+  N_near/N_far   = 20 / 20    passi near/far
+  Ts_near/far    = 1.0 / 1.2 s   passo temporale near / far
+  T_hor          = 44.0 s      orizzonte totale
+  Ts_ctrl        = 1.0 s      sample time controller
+
+------------------------------------------------------------------------
+ [2] VINCOLI CINEMATICI
+------------------------------------------------------------------------
+  Ax_min/max     = -1.50 / 1.50 m/s^2   acc. longitudinale
+  Ay_max         = 2.00 m/s^2           acc. laterale (v^2*k <= Ay_max)
+  jerk_min/max   = -0.50 / 0.50 m/s^3   ingresso di controllo
+  V_max          = 50 km/h (13.8889 m/s)  limite velocita'
+  v_eps          = 0.020 m/s             tolleranza velocita' negativa
+
+------------------------------------------------------------------------
+ [3] GAP INTER-VEICOLARE
+------------------------------------------------------------------------
+  L_platoon      = 7.8 m     lunghezza veicolo
+  d_gap          = 3.0 m     gap netto desiderato
+  gap_min        = 1.0 m     gap netto minimo (vincolo hard OCP)
+  eps_aero       = 0.10 m^2   smoothing costo aerodinamico
+
+------------------------------------------------------------------------
+ [4] FERMATE BUS
+------------------------------------------------------------------------
+  t_dwell        = 7 s       sosta obbligatoria
+  eps_stop_back  = 0.5 m     tolleranza dietro la fermata
+  eps_stop_front = 0.5 m     tolleranza davanti la fermata
+  eps_stop_v     = 0.10 m/s   velocita' max durante sosta
+  eps_stop_a     = 0.30 m/s^2 acc. max durante sosta
+  eps_stop_num   = 0.10 m     tolleranza numerica vincolo approccio
+
+------------------------------------------------------------------------
+ [5] SEMAFORI
+------------------------------------------------------------------------
+  d_safe_TL      = 0.0 m     margine sicurezza stop line
+  s_max          = 5200 m       lunghezza percorso
+
+------------------------------------------------------------------------
+ [6] PESI COST FUNCTION  (letti da Qx1)
+------------------------------------------------------------------------
+  w_dist         =  100.00    avanzamento (term. principale)
+  w_jerk         =   15.00    jerk (comfort)
+  w_Ax           =   15.00    accelerazione longitudinale
+  w_stop_tgt     =   10.00    attrazione verso fermata
+  w_dwell_pos    =   10.00    posizione durante sosta
+  w_dwell_vel    =    5.00    velocita' durante sosta
+  w_dwell_acc    =    2.00    acc. durante sosta
+  w_aero         =   70.00    spacing/aerodinamico (coppie 1-2, 2-3)
+  [terminal]  w_dist_N = 100.00  (da QN1)
+
+------------------------------------------------------------------------
+ [7] SOLVER ACADO
+------------------------------------------------------------------------
+  Levenberg-Marquardt = 1e-04
+  Integratore         = RK4  (MULTIPLE_SHOOTING)
+  N_integrator_steps  = 40
+  QP solver           = qpOASES3  (FULL_CONDENSING_N2)
+  Appross. Hessiano   = GAUSS_NEWTON
+
+========================================================================

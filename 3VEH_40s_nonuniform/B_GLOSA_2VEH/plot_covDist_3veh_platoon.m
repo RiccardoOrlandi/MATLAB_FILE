@@ -1,362 +1,240 @@
-function h = plot_covDist_3veh_platoon(out,i_fig,s_TL,s_stop,L_platoon)
+function h = plot_covDist_3veh_platoon(out, i_fig, s_TL, s_stop, L_platoon)
 % ============================================================
-% PLOT NMPC-BGLOSA 3 VEHICLES WITH FINITE LENGTH L_PLATOON
-%
-% State convention:
-%   out.states(:,1) = s1
-%   out.states(:,2) = v1
-%   out.states(:,3) = a1
-%   out.states(:,4) = s2
-%   out.states(:,5) = v2
-%   out.states(:,6) = a2
-%   out.states(:,7) = s3
-%   out.states(:,8) = v3
-%   out.states(:,9) = a3
-%
-% Vehicle length:
-%   s_tail_i = s_head_i - L_platoon
-%
-% Figure i_fig:
-%   space-time trajectory of all vehicles + TL phases + stops
-%
-% Figure i_fig+1:
-%   diagnostics: speed, acceleration, control input, objective, solver status
+% PLOT_COVDIST_3VEH_PLATOON
+% Genera 3 figure:
+%   Fig i_fig   - Traiettoria spazio-tempo + fasi TL + fermate
+%   Fig i_fig+1 - Jerk / Velocita' / Accelerazione (3 veicoli sovrapposti)
+%   Fig i_fig+2 - Execution time / Objective / nIteration / Solver status
 % ============================================================
 
-%% ============================================================
-% Extract main signals
-% ============================================================
+%% ----------------------------------------------------------
+%  1. ESTRAZIONE STATI
+%  ----------------------------------------------------------
 
-t_states = out.states.time(:);
-x_states = out.states.signals.values;
+t_st = out.states.time(:);
+xs   = out.states.signals.values;          % [1601 x 9]
 
-if size(x_states,2) < 9
-    error('out.states must contain 9 columns: [s1 v1 a1 s2 v2 a2 s3 v3 a3].');
-end
+s1 = xs(:,1);  v1 = xs(:,2);  a1 = xs(:,3);
+s2 = xs(:,4);  v2 = xs(:,5);  a2 = xs(:,6);
+s3 = xs(:,7);  v3 = xs(:,8);  a3 = xs(:,9);
 
-s1_head = x_states(:,1);
-v1_head = x_states(:,2);
-a1_head = x_states(:,3);
+s1t = s1 - L_platoon;
+s2t = s2 - L_platoon;
+s3t = s3 - L_platoon;
 
-s2_head = x_states(:,4);
-v2_head = x_states(:,5);
-a2_head = x_states(:,6);
-
-s3_head = x_states(:,7);
-v3_head = x_states(:,8);
-a3_head = x_states(:,9);
-
-s1_tail = s1_head - L_platoon;
-s2_tail = s2_head - L_platoon;
-s3_tail = s3_head - L_platoon;
-
-%% ============================================================
-% Extract control input
-% ============================================================
-% u1 from out.u, u2 from out.u2, u3 from out.u3 (separate To Workspace blocks)
+%% ----------------------------------------------------------
+%  2. ESTRAZIONE CONTROLLI (u, u2, u3 = struct [1x1xN])
+%  ----------------------------------------------------------
 
 t_u = out.u.time(:);
-u_raw = out.u.signals.values;
-u_mat = local_signal_to_matrix(u_raw,length(t_u));
-u1 = u_mat(:,1);
+u1  = squeeze(out.u.signals.values);        % [1601 x 1] -> [1601]
+u2  = squeeze(out.u2.signals.values);
+u3  = squeeze(out.u3.signals.values);
 
-% Vehicle 2 control input
-if isfield(out,'u2') && ~isempty(out.u2.signals.values)
-    u2_raw = out.u2.signals.values;
-    u2_mat = local_signal_to_matrix(u2_raw,length(t_u));
-    u2 = u2_mat(:,1);
-elseif size(u_mat,2) >= 2
-    u2 = u_mat(:,2);
-else
-    u2 = nan(size(u1));
-end
+%% ----------------------------------------------------------
+%  3. ESTRAZIONE SEGNALI DI DIAGNOSTICA
+%  ----------------------------------------------------------
 
-% Vehicle 3 control input
-if isfield(out,'u3') && ~isempty(out.u3.Data)
-    u3_raw = out.u3.Data;
-    u3 = local_signal_to_matrix(u3_raw, length(t_u));
-    u3 = u3(:,1);
-elseif size(u_mat,2) >= 3
-    u3 = u_mat(:,3);
-else
-    u3 = nan(size(u1));
-end
+t_J  = out.Objective_Value.time(:);
+J    = squeeze(out.Objective_Value.signals.values);
 
-%% ============================================================
-% Extract objective function
-% ============================================================
+t_st2 = out.status.time(:);
+stat  = squeeze(out.status.signals.values);
 
-J = squeeze(out.Objective_Value.signals.values);
-J = J(:);
+t_ni  = out.nIteration.time(:);
+nIter = squeeze(out.nIteration.signals.values);
 
-if isfield(out.Objective_Value,'time')
-    t_J = out.Objective_Value.time(:);
-else
-    t_J = t_states;
-end
+t_ex  = out.executionTime.time(:);
+exT   = squeeze(out.executionTime.signals.values);
 
-%% ============================================================
-% Extract solver status
-% ============================================================
+%% ----------------------------------------------------------
+%  PALETTE COLORI
+%  ----------------------------------------------------------
 
-solver_status = squeeze(out.status.signals.values);
-solver_status = solver_status(:);
+cV1 = [0.00, 0.45, 0.70];   % blu
+cV2 = [0.77, 0.29, 0.77];   % viola
+cV3 = [0.91, 0.63, 0.00];   % ambra
+lw  = 1.8;
 
-if isfield(out.status,'time')
-    t_status = out.status.time(:);
-else
-    t_status = t_states;
-end
-
-%% ============================================================
-% FIGURE 1: SPACE-TIME TRAJECTORY + TRAFFIC LIGHTS + STOPS
-% ============================================================
+%% ==========================================================
+%  FIGURA 1: TRAIETTORIA SPAZIO-TEMPO
+%% ==========================================================
 
 h.fig_traj = figure(i_fig);
-clf(h.fig_traj)
-hold on
+clf(h.fig_traj);
+hold on;
 
-% ------------------------------------------------------------
-% Traffic-light phases - vectorized plotting
-% ------------------------------------------------------------
-
-t_tl = out.x_tl_hor.time(:);
-nT  = length(t_tl);
-nTL = length(s_TL);
-
-tl_state = squeeze(out.x_tl_hor.signals.values(1,1:nTL,1:nT));
-
-% Dopo squeeze, normalmente tl_state è [nTL x nT].
-% Lo porto sempre nel formato [nT x nTL].
-if size(tl_state,1) == nTL
-    tl_state = tl_state.';
+% --- Fasi semaforiche ---
+t_tl    = out.x_tl_hor.time(:);
+nT      = length(t_tl);
+nTL     = length(s_TL);
+tl_raw  = out.x_tl_hor.signals.values;
+tl_st   = squeeze(tl_raw(1, 1:nTL, 1:nT));  % [nTL x nT]
+if size(tl_st,1) == nTL && size(tl_st,2) == nT
+    tl_st = tl_st.';                          % -> [nT x nTL]
 end
+[T_g, S_g] = ndgrid(t_tl, s_TL(:));
+pg = plot(T_g(tl_st==1), S_g(tl_st==1), '.g', 'MarkerSize', 5);
+pr = plot(T_g(tl_st==0), S_g(tl_st==0), '.r', 'MarkerSize', 5);
+pg.Annotation.LegendInformation.IconDisplayStyle = 'off';
+pr.Annotation.LegendInformation.IconDisplayStyle = 'off';
 
-[T_grid,S_grid] = ndgrid(t_tl,s_TL(:));
-
-idx_green = (tl_state == 1);
-idx_red   = ~idx_green;
-
-hp_g = plot(T_grid(idx_green),S_grid(idx_green),'.g','MarkerSize',6);
-hp_r = plot(T_grid(idx_red),  S_grid(idx_red),  '.r','MarkerSize',6);
-
-hp_g.Annotation.LegendInformation.IconDisplayStyle = 'off';
-hp_r.Annotation.LegendInformation.IconDisplayStyle = 'off';
-
-% ------------------------------------------------------------
-% Bus stops
-% ------------------------------------------------------------
-
+% --- Fermate bus ---
 for jj = 1:length(s_stop)
-
-    hp = plot([t_states(1) t_states(end)], ...
-              [s_stop(jj) s_stop(jj)],'--k');
-
-    hp.Annotation.LegendInformation.IconDisplayStyle = 'off';
-
+    hs = plot([t_st(1) t_st(end)], [s_stop(jj) s_stop(jj)], '--k', 'LineWidth', 0.9);
+    hs.Annotation.LegendInformation.IconDisplayStyle = 'off';
 end
 
-% ------------------------------------------------------------
-% Vehicle trajectories
-% ------------------------------------------------------------
+% --- Traiettorie ---
+hh(1) = plot(t_st, s1,  '-',  'Color', cV1, 'LineWidth', lw);
+hh(2) = plot(t_st, s1t, '--', 'Color', cV1, 'LineWidth', lw);
+hh(3) = plot(t_st, s2,  '-',  'Color', cV2, 'LineWidth', lw);
+hh(4) = plot(t_st, s2t, '--', 'Color', cV2, 'LineWidth', lw);
+hh(5) = plot(t_st, s3,  '-',  'Color', cV3, 'LineWidth', lw);
+hh(6) = plot(t_st, s3t, '--', 'Color', cV3, 'LineWidth', lw);
 
-h_v1_head = plot(t_states,s1_head,'LineWidth',2);
-h_v1_tail = plot(t_states,s1_tail,'--','LineWidth',2);
+grid on; box on;
+xlabel('Tempo [s]');  ylabel('Posizione [m]');
+legend(hh, {'Veh 1 testa','Veh 1 coda', ...
+            'Veh 2 testa','Veh 2 coda', ...
+            'Veh 3 testa','Veh 3 coda'}, 'Location', 'best');
+title('Traiettorie spazio-tempo – fasi TL e fermate bus');
 
-h_v2_head = plot(t_states,s2_head,'LineWidth',2);
-h_v2_tail = plot(t_states,s2_tail,'--','LineWidth',2);
+%% ==========================================================
+%  FIGURA 2: JERK / VELOCITA' / ACCELERAZIONE
+%% ==========================================================
 
-h_v3_head = plot(t_states,s3_head,'LineWidth',2);
-h_v3_tail = plot(t_states,s3_tail,'--','LineWidth',2);
+h.fig_kinem = figure(i_fig+1);
+clf(h.fig_kinem);
 
-grid on
-xlabel('Time [s]')
-ylabel('Covered distance [m]')
+tl2 = tiledlayout(h.fig_kinem, 3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
 
-legend([h_v1_head h_v1_tail h_v2_head h_v2_tail h_v3_head h_v3_tail], ...
-       {'Vehicle 1 head','Vehicle 1 tail', ...
-        'Vehicle 2 head','Vehicle 2 tail', ...
-        'Vehicle 3 head','Vehicle 3 tail'}, ...
-       'Location','best')
+% --- Jerk ---
+ax_j = nexttile(tl2);
+hold(ax_j, 'on');
+yline(ax_j,  0.5, '--k', 'LineWidth', 0.9);
+yline(ax_j, -0.5, '--k', 'LineWidth', 0.9);
+plot(ax_j, t_u, u1, '-', 'Color', cV1, 'LineWidth', lw, 'DisplayName', 'Veh 1');
+plot(ax_j, t_u, u2, '-', 'Color', cV2, 'LineWidth', lw, 'DisplayName', 'Veh 2');
+plot(ax_j, t_u, u3, '-', 'Color', cV3, 'LineWidth', lw, 'DisplayName', 'Veh 3');
+grid(ax_j, 'on'); box(ax_j, 'on');
+ylabel(ax_j, 'Jerk [m/s^3]');
+legend(ax_j, 'Location', 'best');
+title(ax_j, 'Jerk (ingresso di controllo)');
 
-title('Three finite-length vehicles: head/tail trajectories and traffic-light phases')
+% --- Velocita' ---
+ax_v = nexttile(tl2);
+hold(ax_v, 'on');
+yline(ax_v, 50, '--k', 'LineWidth', 0.9);
+plot(ax_v, t_st, v1.*3.6, '-', 'Color', cV1, 'LineWidth', lw, 'DisplayName', 'Veh 1');
+plot(ax_v, t_st, v2.*3.6, '-', 'Color', cV2, 'LineWidth', lw, 'DisplayName', 'Veh 2');
+plot(ax_v, t_st, v3.*3.6, '-', 'Color', cV3, 'LineWidth', lw, 'DisplayName', 'Veh 3');
+grid(ax_v, 'on'); box(ax_v, 'on');
+ylabel(ax_v, 'V [km/h]');
+ylim(ax_v, [0 55]);
+legend(ax_v, 'Location', 'best');
+title(ax_v, 'Velocita');
 
-%% ============================================================
-% FIGURE 2: DIAGNOSTICS
-% ============================================================
+% --- Accelerazione ---
+ax_a = nexttile(tl2);
+hold(ax_a, 'on');
+yline(ax_a,  1.5, '--k', 'LineWidth', 0.9);
+yline(ax_a, -1.5, '--k', 'LineWidth', 0.9);
+plot(ax_a, t_st, a1, '-', 'Color', cV1, 'LineWidth', lw, 'DisplayName', 'Veh 1');
+plot(ax_a, t_st, a2, '-', 'Color', cV2, 'LineWidth', lw, 'DisplayName', 'Veh 2');
+plot(ax_a, t_st, a3, '-', 'Color', cV3, 'LineWidth', lw, 'DisplayName', 'Veh 3');
+grid(ax_a, 'on'); box(ax_a, 'on');
+ylabel(ax_a, 'A_x [m/s^2]');
+legend(ax_a, 'Location', 'best');
+title(ax_a, 'Accelerazione longitudinale');
+xlabel(ax_a, 'Tempo [s]');
 
-h.fig_diag = figure(i_fig+1);
-clf(h.fig_diag)
+linkaxes([ax_j ax_v ax_a], 'x');
+sgtitle(tl2, 'Cinematica – 3 veicoli sovrapposti');
 
-tl = tiledlayout(h.fig_diag,5,1, ...
-    'TileSpacing','compact', ...
-    'Padding','compact');
+%% ==========================================================
+%  FIGURA 3: DIAGNOSTICA SOLVER
+%% ==========================================================
 
-%% ============================================================
-% Speed
-% ============================================================
+h.fig_solver = figure(i_fig+2);
+clf(h.fig_solver);
 
-ax1 = nexttile(tl);
-hold(ax1,'on')
+tl3 = tiledlayout(h.fig_solver, 4, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
 
-g = plot(ax1,[t_states(1) t_states(end)],[15 15],'--k');
-g.Annotation.LegendInformation.IconDisplayStyle = 'off';
+% --- Execution time ---
+ax_e = nexttile(tl3);
+plot(ax_e, t_ex, exT.*1e3, '-', 'Color', [0.2 0.2 0.6], 'LineWidth', 1.2);
+hold(ax_e, 'on');
+yline(ax_e, mean(exT)*1e3, '--r', 'LineWidth', 1, 'DisplayName', ...
+     sprintf('media %.1f ms', mean(exT)*1e3));
+grid(ax_e, 'on'); box(ax_e, 'on');
+ylabel(ax_e, 't_{exec} [ms]');
+legend(ax_e, 'Location', 'best');
+title(ax_e, sprintf('Execution time    media=%.1f ms  max=%.1f ms', mean(exT)*1e3, max(exT)*1e3));
 
-g = plot(ax1,[t_states(1) t_states(end)],[50 50],'--k');
-g.Annotation.LegendInformation.IconDisplayStyle = 'off';
+% --- Objective function ---
+ax_o = nexttile(tl3);
+plot(ax_o, t_J, J, '-', 'Color', [0.6 0.1 0.1], 'LineWidth', 1.2);
+grid(ax_o, 'on'); box(ax_o, 'on');
+ylabel(ax_o, 'J [-]');
+title(ax_o, 'Objective function');
 
-plot(ax1,t_states,v1_head.*3.6,'LineWidth',2)
-plot(ax1,t_states,v2_head.*3.6,'LineWidth',2)
-plot(ax1,t_states,v3_head.*3.6,'LineWidth',2)
+% --- nIteration ---
+ax_n = nexttile(tl3);
+stairs(ax_n, t_ni, nIter, '-', 'Color', [0.1 0.5 0.1], 'LineWidth', 1.2);
+hold(ax_n, 'on');
+yline(ax_n, mean(nIter), '--r', 'LineWidth', 1, 'DisplayName', ...
+     sprintf('media %.0f', mean(nIter)));
+grid(ax_n, 'on'); box(ax_n, 'on');
+ylabel(ax_n, 'nIter [-]');
+legend(ax_n, 'Location', 'best');
+title(ax_n, sprintf('Iterazioni QP    media=%.0f  max=%.0f', mean(nIter), max(nIter)));
 
-grid(ax1,'on')
-xlabel(ax1,'Time [s]')
-ylabel(ax1,'V [km/h]')
-ylim(ax1,[0 55])
-legend(ax1,{'Vehicle 1','Vehicle 2','Vehicle 3'},'Location','best')
-title(ax1,'Speed')
-
-%% ============================================================
-% Acceleration
-% ============================================================
-
-ax2 = nexttile(tl);
-hold(ax2,'on')
-
-plot(ax2,t_states,a1_head,'LineWidth',2)
-plot(ax2,t_states,a2_head,'LineWidth',2)
-plot(ax2,t_states,a3_head,'LineWidth',2)
-
-grid(ax2,'on')
-xlabel(ax2,'Time [s]')
-ylabel(ax2,'A_x [m/s^2]')
-legend(ax2,{'Vehicle 1','Vehicle 2','Vehicle 3'},'Location','best')
-title(ax2,'Longitudinal acceleration')
-
-%% ============================================================
-% Control input
-% ============================================================
-
-ax3 = nexttile(tl);
-hold(ax3,'on')
-
-plot(ax3,t_u,u1,'LineWidth',2)
-
-legend_entries = {'Vehicle 1'};
-
-if all(isfinite(u2))
-    plot(ax3,t_u,u2,'LineWidth',2)
-    legend_entries{end+1} = 'Vehicle 2';
+% --- Solver status ---
+ax_s = nexttile(tl3);
+hold(ax_s, 'on');
+% sfondo rosso per status < 0 (compatibile R2022b)
+bad_mask = stat < 0;
+bad_t    = t_st2(bad_mask);
+y_lo = min(stat)-1.5;  y_hi = max(stat)+1.5;
+if y_lo == y_hi; y_lo = y_lo-1; y_hi = y_hi+1; end
+for bi = 1:length(bad_t)
+    patch(ax_s, [bad_t(bi)-0.5 bad_t(bi)+0.5 bad_t(bi)+0.5 bad_t(bi)-0.5], ...
+          [y_lo y_lo y_hi y_hi], [1 0.7 0.7], 'FaceAlpha', 0.5, 'EdgeColor', 'none');
 end
+stairs(ax_s, t_st2, stat, '-', 'Color', [0.1 0.1 0.1], 'LineWidth', 1.5);
+yline(ax_s, 0, '--k', 'LineWidth', 0.9);
+grid(ax_s, 'on'); box(ax_s, 'on');
+ylabel(ax_s, 'status [-]');
+xlabel(ax_s, 'Tempo [s]');
+st_lims = [min(stat)-1, max(stat)+1];
+if st_lims(1) == st_lims(2), st_lims = st_lims + [-1 1]; end
+ylim(ax_s, st_lims);
+n_bad = sum(bad_mask);
+title(ax_s, sprintf('Solver status    0=OK  -2=infeasible  +1=maxIter   (%d step negativi)', n_bad));
 
-if all(isfinite(u3))
-    plot(ax3,t_u,u3,'LineWidth',2)
-    legend_entries{end+1} = 'Vehicle 3';
-end
+linkaxes([ax_e ax_o ax_n ax_s], 'x');
+sgtitle(tl3, 'Diagnostica solver NMPC');
 
-grid(ax3,'on')
-xlabel(ax3,'Time [s]')
-ylabel(ax3,'u [m/s^3]')
-legend(ax3,legend_entries,'Location','best')
-title(ax3,'Control input / jerk')
+%% ----------------------------------------------------------
+%  STAMPA RIEPILOGO
+%  ----------------------------------------------------------
 
-%% ============================================================
-% Objective function
-% ============================================================
+gap12 = s1 - s2 - L_platoon;
+gap23 = s2 - s3 - L_platoon;
 
-ax4 = nexttile(tl);
-
-plot(ax4,t_J,J,'LineWidth',2)
-
-grid(ax4,'on')
-xlabel(ax4,'Time [s]')
-ylabel(ax4,'J [-]')
-title(ax4,'NMPC objective function')
-
-%% ============================================================
-% Solver status
-% ============================================================
-
-ax5 = nexttile(tl);
-stairs(ax5,t_status,solver_status,'LineWidth',2)
-hold(ax5,'on')
-yline(ax5,0,'--k')
-
-grid(ax5,'on')
-xlabel(ax5,'Time [s]')
-ylabel(ax5,'status [-]')
-title(ax5,'Solver status')
-
-status_min = min(solver_status(:));
-status_max = max(solver_status(:));
-
-if status_min == status_max
-    ylim(ax5,[status_min-1 status_max+1])
-else
-    ylim(ax5,[status_min-1 status_max+1])
-end
-
-linkaxes([ax1 ax2 ax3 ax4 ax5],'x')
-
-sgtitle(tl,'NMPC-BGLOSA diagnostics - three finite-length vehicles')
-
-%% ============================================================
-% Print critical solver events
-% ============================================================
-
-bad_idx = find(solver_status(:) < 0);
-
-fprintf('\n=== NMPC diagnostics ===\n')
-
-if isempty(bad_idx)
-    fprintf('No negative solver status detected.\n')
-else
-    fprintf('Negative solver status detected at:\n')
-    disp(t_status(bad_idx))
-end
-
-%% ============================================================
-% Optional numerical gap diagnostics
-% ============================================================
-
-gap12 = s1_head - s2_head - L_platoon;
-gap23 = s2_head - s3_head - L_platoon;
-
-fprintf('\n=== Gap diagnostics ===\n')
-fprintf('min gap12 = %.3f m\n',min(gap12));
-fprintf('min gap23 = %.3f m\n',min(gap23));
-
-end
-
-%% ============================================================
-% LOCAL FUNCTION: convert Simulink signal to [time x channels]
-% ============================================================
-
-function M = local_signal_to_matrix(values,n_time)
-
-values = squeeze(values);
-
-if isvector(values)
-
-    M = values(:);
-
-else
-
-    if size(values,1) == n_time
-
-        M = values;
-
-    elseif size(values,2) == n_time
-
-        M = values.';
-
-    else
-
-        values = reshape(values,[],n_time).';
-        M = values;
-
-    end
-
-end
+fprintf("\n=== Riepilogo simulazione ===\n");
+fprintf("  Gap min 1-2 : %.3f m\n", min(gap12));
+fprintf("  Gap min 2-3 : %.3f m\n", min(gap23));
+fprintf("  |u1| max    : %.4f m/s3\n", max(abs(u1)));
+fprintf("  |u2| max    : %.4f m/s3\n", max(abs(u2)));
+fprintf("  |u3| max    : %.4f m/s3\n", max(abs(u3)));
+fprintf("  J max       : %.2f\n",     max(J));
+fprintf("  exec max    : %.1f ms\n",  max(exT)*1e3);
+fprintf("  exec media  : %.1f ms\n",  mean(exT)*1e3);
+fprintf("  nIter max   : %.0f\n",     max(nIter));
+n_bad = sum(stat < 0);
+fprintf("  status < 0  : %d step (%.1f%%)\n", n_bad, 100*n_bad/length(stat));
+fprintf("==============================\n");
 
 end

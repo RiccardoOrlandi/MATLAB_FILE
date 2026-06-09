@@ -34,21 +34,21 @@
 % 23  cost_aero23         spacing/aerodinamicita' veicolo 2-3
 
 Qx1 = [ ...
-    30, 30, 30, ...       % distance progress
-    2, 2, 2, ...          % jerk
-    0.5, 0.5, 0.5, ...    % longitudinal acceleration
-    50, 50, 50, ...       % stop target attraction
-    200, 200, 200, ...    % dwell position
-    500, 500, 500, ...    % dwell velocity
-    100, 100, 100, ...    % dwell acceleration
-    0.3, 0.3];      % spacing/aero 1-2 and 2-3
+    100, 100, 100, ...       % distance progress
+    10, 10, 10, ...          % jerk
+    15, 15, 15, ...    % longitudinal acceleration
+    10, 10, 10, ...       % stop target attraction
+    10, 10, 10, ...    % dwell position
+    5, 5, 5, ...    % dwell velocity
+    2, 2, 2, ...    % dwell acceleration
+    70, 70];      % spacing/aero 1-2 and 2-3
     %1e6, 1e6];        %slack gap12 slack gap23
 
 W1 = diag(Qx1);
 NMPC_Wmat1 = reshape(W1.',1,[]);
 
 % Terminal cost: avanzamento terminale dei tre veicoli.
-QN1 = [30 30 30];
+QN1 = [100 100 100];
 WN1 = diag(QN1);
 NMPC_WNmat1 = reshape(WN1.',1,[]);
 N_Jterms = length(Qx1);
@@ -57,7 +57,7 @@ N_Jterms = length(Qx1);
 %  2. Parametri generali MPC
 %  ========================================================================
 
-t_dwell = 10;
+t_dwell = 7;
 t_offset = 0;
 
 zInit = [];
@@ -77,12 +77,12 @@ N_iter = 1;
 %==========================================================================
 
 Ts = 1.0;        % [s] sample time controller
-N  = 40;         % [-] numero intervalli OCP
+N  = 44;         % [-] numero intervalli OCP
 
-N_near  = 20;
-N_far   = 20;
+N_near  = 14;
+N_far   = 30;
 Ts_near = 1.0;
-Ts_far  = 1.5;
+Ts_far  = 1.2;
 
 t_near = 0:Ts_near:(N_near*Ts_near);
 t_far  = t_near(end) + Ts_far*(1:N_far);
@@ -102,9 +102,12 @@ Vmax_2 = 50;
 Vmax_3 = 50;
 
 % Stato iniziale ACADO: [pos vel acc pos2 vel2 acc2 pos3 vel3 acc3]
-xInit = [0 2 0 -15 2 0 -30 2 0];
+xInit = [0 0 0 -9 0 0 -19 0 0];
 uInit = [0 0 0];
-
+% s_TL = [45.5, 203.2, 384.2, 589.4, 773.6, 1004.2, 1225.3, 1419.7, 1507.8, 1739.0, ...
+%         1823.0, 1948.9, 2046.6, 2287.9, 2421.5, 2635.8, 2683.8, 2773.9, 2800.2, 2828.4, ...
+%         2981.4, 3232.6, 3420.6, 3600.4, 3764.9, 4051.8, 4215.6, 4434.6, 4648.9, 5107.8];
+% s_stop = [80, 447, 756, 1084, 1304, 1507, 1822];
 %% ========================================================================
 %  3. Traffic light data
 %  ========================================================================
