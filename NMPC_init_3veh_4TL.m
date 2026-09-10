@@ -34,23 +34,21 @@
 % 23  cost_aero23         spacing/aerodinamicita' veicolo 2-3
 
 Qx1 = [ ...
-    30, 30, 30, ...       % distance progress
-    2, 2, 2, ...          % jerk
-    0.5, 0.5, 0.5, ...    % longitudinal acceleration
-    50, 50, 50, ...       % stop target attraction
-    200, 200, 200, ...    % dwell position
-    500, 500, 500, ...    % dwell velocity
-    100, 100, 100, ...    % dwell acceleration
-    0.1, 0.1, ...         % spacing/aero 1-2 and 2-3
-    100000, 100000, 100000]; ...        %slack J_min
-    %10000, 10000, 10000];           %slack J_max
-
+    100, 100, 100, ...       % distance progress
+    10, 10, 10, ...          % jerk
+    15, 15, 15, ...    % longitudinal acceleration
+    10, 10, 10, ...       % stop target attraction
+    10, 10, 10, ...    % dwell position
+    5, 5, 5, ...    % dwell velocity
+    2, 2, 2, ...    % dwell acceleration
+    70, 70];      % spacing/aero 1-2 and 2-3
+    %1e6, 1e6];        %slack gap12 slack gap23
 
 W1 = diag(Qx1);
 NMPC_Wmat1 = reshape(W1.',1,[]);
 
 % Terminal cost: avanzamento terminale dei tre veicoli.
-QN1 = [30 30 30];
+QN1 = [100 100 100];
 WN1 = diag(QN1);
 NMPC_WNmat1 = reshape(WN1.',1,[]);
 N_Jterms = length(Qx1);
@@ -59,7 +57,7 @@ N_Jterms = length(Qx1);
 %  2. Parametri generali MPC
 %  ========================================================================
 
-t_dwell = 10;
+t_dwell = 7;
 t_offset = 0;
 
 zInit = [];
@@ -68,45 +66,101 @@ bValues = [];
 N_iter = 1;
 
 %==========================================================================
-% Griglia temporale NMPC non uniforme
+% Griglia NMPC Chebyshev-Lobatto attenuata
 %==========================================================================
-% 40 intervalli, 41 nodi:
-%   nodi 1..21  : 0:1:20 s
-%   nodi 22..41 : 21.5:1.5:50 s
+% N = 44 intervalli, 45 nodi, orizzonte totale 50 s.
 %
-% Ts resta pari a 1 s perché rappresenta il sample time del controller
-% Simulink/NMPC, non il passo interno della griglia OCP.
+% La griglia è:
+% - più fitta vicino a t = 0;
+% - più rada al centro;
+% - più fitta vicino a t = 50 s.
+%
+% La componente uniforme viene mantenuta per ottenere:
+%   dt iniziale = dt finale = Ts_ctrl = 1 s.
 %==========================================================================
 
-Ts = 1.0;        % [s] sample time controller
-N  = 40;         % [-] numero intervalli OCP
+Ts_ctrl = 1.0;      % [s] aggiornamento reale NMPC/Simulink
+Ts      = Ts_ctrl;  % compatibilità con i blocchi che usano ancora Ts
 
-N_near  = 20;
-N_far   = 20;
-Ts_near = 1.0;
-Ts_far  = 1.5;
+N       = 35;       % numero intervalli OCP
+T_hor   = 50.0;     % orizzonte predittivo totale [s]
 
-t_near = 0:Ts_near:(N_near*Ts_near);
-t_far  = t_near(end) + Ts_far*(1:N_far);
+% Indici dei 45 nodi
+k_grid = (0:N)';
 
-timepoints = [t_near, t_far];   % 1 x 41
-time_grid  = timepoints(:);     % 41 x 1
+% Griglia uniforme normalizzata in [0,1]
+tau_uniform = k_grid/N;
 
-if numel(timepoints) ~= N+1
-    error('Errore griglia NMPC: numel(timepoints) deve essere N+1.');
+% Chebyshev-Lobatto pura normalizzata in [0,1]
+tau_cheb = 0.5*(1-cos(pi*k_grid/N));
+
+% Calcolo automatico del blending necessario per avere
+% il primo e l'ultimo intervallo pari a Ts_ctrl
+dtau_uniform = 1/N;
+dtau_cheb_1  = tau_cheb(2)-tau_cheb(1);
+
+beta_cheb = (Ts_ctrl/T_hor-dtau_uniform) / ...
+            (dtau_cheb_1-dtau_uniform);
+
+if beta_cheb < 0 || beta_cheb > 1
+    error('Valore beta_cheb non valido: %.6f.',beta_cheb);
 end
 
-if abs(timepoints(end) - 50.0) > 1e-12
-    error('Errore griglia NMPC: orizzonte finale diverso da 50 s.');
+% Griglia Chebyshev attenuata
+tau_grid = (1-beta_cheb)*tau_uniform + ...
+            beta_cheb*tau_cheb;
+
+% Tempi cumulativi dei nodi, vettore colonna 45x1
+time_grid = T_hor*tau_grid;
+
+% Forzo esattamente gli estremi per evitare errori numerici
+time_grid(1)   = 0.0;
+time_grid(end) = T_hor;
+
+% ACADO preferisce il vettore riga
+timepoints = time_grid.';
+
+% Durata dei 44 intervalli
+dt_grid = diff(time_grid);
+
+% Controlli
+if numel(time_grid) ~= N+1
+    error('time_grid deve contenere %d nodi.',N+1);
 end
+
+if any(dt_grid <= 0)
+    error('La griglia contiene intervalli nulli o negativi.');
+end
+
+if abs(time_grid(end)-T_hor) > 1e-10
+    error('Orizzonte finale diverso da %.2f s.',T_hor);
+end
+
+if abs(dt_grid(1)-Ts_ctrl) > 1e-10
+    error('Il primo intervallo non è pari a Ts_ctrl.');
+end
+
+fprintf('\nGriglia Chebyshev NMPC:\n');
+fprintf('  N intervalli  = %d\n',N);
+fprintf('  N nodi        = %d\n',N+1);
+fprintf('  T orizzonte   = %.3f s\n',T_hor);
+fprintf('  beta Cheb.    = %.6f\n',beta_cheb);
+fprintf('  dt iniziale   = %.6f s\n',dt_grid(1));
+fprintf('  dt massimo    = %.6f s\n',max(dt_grid));
+fprintf('  dt finale     = %.6f s\n\n',dt_grid(end));
+
+
 Vmax   = 50;
 Vmax_2 = 50;
 Vmax_3 = 50;
 
 % Stato iniziale ACADO: [pos vel acc pos2 vel2 acc2 pos3 vel3 acc3]
-xInit = [0 2 0 -15 2 0 -30 2 0];
-uInit = [0 0 0 0 0 0];
-
+xInit = [0 0 0 -9 0 0 -19 0 0];
+uInit = [0 0 0];
+% s_TL = [45.5, 203.2, 384.2, 589.4, 773.6, 1004.2, 1225.3, 1419.7, 1507.8, 1739.0, ...
+%         1823.0, 1948.9, 2046.6, 2287.9, 2421.5, 2635.8, 2683.8, 2773.9, 2800.2, 2828.4, ...
+%         2981.4, 3232.6, 3420.6, 3600.4, 3764.9, 4051.8, 4215.6, 4434.6, 4648.9, 5107.8];
+% s_stop = [80, 447, 756, 1084, 1304, 1507, 1822];
 %% ========================================================================
 %  3. Traffic light data
 %  ========================================================================
