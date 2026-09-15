@@ -1,0 +1,171 @@
+%==========================================================================
+% NMPC INIT - B-GLOSA 1 veicolo - 4 TL attivi
+%==========================================================================
+% Script da eseguire dopo la generazione ACADO_1veh_4TL.m e prima della
+% simulazione Simulink.
+%=========================================================================
+
+%% ========================================================================
+%  1. Soft Constraints / Cost Function Weights
+%  ========================================================================
+% Ordine dei termini h in ACADO_1veh_4TL.m:
+%  1  cost_dist           avanzamento veicolo
+%  2  cost_jerk           jerk veicolo
+%  3  cost_Ax             accelerazione veicolo
+%  4  cost_stop_target    attrazione fermata veicolo
+%  5  cost_dwell_pos      posizione durante dwell veicolo
+%  6  cost_dwell_vel      velocita' durante dwell veicolo
+%  7  cost_dwell_acc      accelerazione durante dwell veicolo
+
+Qx1 = [ ...
+    100, ...       % distance progress
+    10, ...          % jerk
+    15, ...    % longitudinal acceleration
+    10, ...       % stop target attraction
+    10, ...    % dwell position
+    5, ...    % dwell velocity
+    2];    % dwell acceleration
+
+W1 = diag(Qx1);
+NMPC_Wmat1 = reshape(W1.',1,[]);
+
+% Terminal cost: avanzamento terminale del veicolo.
+QN1 = [100];
+WN1 = diag(QN1);
+NMPC_WNmat1 = reshape(WN1.',1,[]);
+N_Jterms = length(Qx1);
+
+%% ========================================================================
+%  2. Parametri generali MPC
+%  ========================================================================
+
+t_dwell = 7;
+t_offset = 0;
+
+zInit = [];
+bValues = [];
+
+N_iter = 1;
+
+%==========================================================================
+% Griglia NMPC Chebyshev-Lobatto attenuata
+%==========================================================================
+% N = 44 intervalli, 45 nodi, orizzonte totale 50 s.
+%
+% La griglia è:
+% - più fitta vicino a t = 0;
+% - più rada al centro;
+% - più fitta vicino a t = 50 s.
+%
+% La componente uniforme viene mantenuta per ottenere:
+%   dt iniziale = dt finale = Ts_ctrl = 1 s.
+%==========================================================================
+
+Ts_ctrl = 1.0;      % [s] aggiornamento reale NMPC/Simulink
+Ts      = Ts_ctrl;  % compatibilità con i blocchi che usano ancora Ts
+
+N       = 35;       % numero intervalli OCP
+T_hor   = 50.0;     % orizzonte predittivo totale [s]
+
+% Indici dei 45 nodi
+k_grid = (0:N)';
+
+% Griglia uniforme normalizzata in [0,1]
+tau_uniform = k_grid/N;
+
+% Chebyshev-Lobatto pura normalizzata in [0,1]
+tau_cheb = 0.5*(1-cos(pi*k_grid/N));
+
+% Calcolo automatico del blending necessario per avere
+% il primo e l'ultimo intervallo pari a Ts_ctrl
+dtau_uniform = 1/N;
+dtau_cheb_1  = tau_cheb(2)-tau_cheb(1);
+
+beta_cheb = (Ts_ctrl/T_hor-dtau_uniform) / ...
+            (dtau_cheb_1-dtau_uniform);
+
+if beta_cheb < 0 || beta_cheb > 1
+    error('Valore beta_cheb non valido: %.6f.',beta_cheb);
+end
+
+% Griglia Chebyshev attenuata
+tau_grid = (1-beta_cheb)*tau_uniform + ...
+            beta_cheb*tau_cheb;
+
+% Tempi cumulativi dei nodi, vettore colonna 45x1
+time_grid = T_hor*tau_grid;
+
+% Forzo esattamente gli estremi per evitare errori numerici
+time_grid(1)   = 0.0;
+time_grid(end) = T_hor;
+
+% ACADO preferisce il vettore riga
+timepoints = time_grid.';
+
+% Durata dei 44 intervalli
+dt_grid = diff(time_grid);
+
+% Controlli
+if numel(time_grid) ~= N+1
+    error('time_grid deve contenere %d nodi.',N+1);
+end
+
+if any(dt_grid <= 0)
+    error('La griglia contiene intervalli nulli o negativi.');
+end
+
+if abs(time_grid(end)-T_hor) > 1e-10
+    error('Orizzonte finale diverso da %.2f s.',T_hor);
+end
+
+if abs(dt_grid(1)-Ts_ctrl) > 1e-10
+    error('Il primo intervallo non è pari a Ts_ctrl.');
+end
+
+fprintf('\nGriglia Chebyshev NMPC:\n');
+fprintf('  N intervalli  = %d\n',N);
+fprintf('  N nodi        = %d\n',N+1);
+fprintf('  T orizzonte   = %.3f s\n',T_hor);
+fprintf('  beta Cheb.    = %.6f\n',beta_cheb);
+fprintf('  dt iniziale   = %.6f s\n',dt_grid(1));
+fprintf('  dt massimo    = %.6f s\n',max(dt_grid));
+fprintf('  dt finale     = %.6f s\n\n',dt_grid(end));
+
+
+Vmax   = 50;
+
+% Stato iniziale ACADO: [pos vel acc]
+xInit = [0 0 0];
+uInit = [0];
+
+%% ========================================================================
+%  3. Traffic light data
+%  ========================================================================
+
+%load('TL_data_piola-tonale_lookupTable_1500s_12TL.mat')
+% Piano semaforico esteso a 2000 s: misurato fino a 1600 s, oltre
+% continuazione deterministica per semaforo (genera_SPAT_esteso_2000s.m).
+load('TL_data_piola-lugano_lookupTable_2000s_30TL_ESTESO.mat')
+
+tl_state_sim = zeros(round(time_bag(end))-1,size(tl_col,2));
+time_bag_sim = (0:1:round(time_bag(end))-1)';
+
+for ii = 1:length(time_bag_sim)
+    for jj = 1:size(tl_col,2)
+        if ii == 1
+            tl_state_sim(ii,jj) = tl_col(1,jj);
+        else
+            tl_state_sim(ii,jj) = tl_col(10*ii-10,jj);
+        end
+    end
+end
+
+%% ========================================================================
+%  4. Road curvature lookup table
+%  ========================================================================
+
+load('k_road_PL_jrl_chs_precomputed.mat','s_kroad_map','k_road_map','ds','s_start')
+s_kroad_map = s_kroad_map(:);
+k_road_map  = k_road_map(:);
+
+addpath(fullfile('..','chs_gen'))
